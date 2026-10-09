@@ -357,13 +357,13 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Step Indicator Header */}
       <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <span className="text-emerald-700 font-semibold text-xs uppercase tracking-wider flex items-center gap-1.5">
               <Wand2 className="w-4 h-4 text-emerald-600" />
               <span>AI Form Builder: Langkah {currentStep} dari 5</span>
             </span>
-            <h2 className="text-lg font-bold text-slate-900 mt-0.5">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 mt-0.5">
               {currentStep === 1 && "Pilih Jenis Surat Keputusan (SK)"}
               {currentStep === 2 && "Konfirmasi Data Satuan Pendidikan & Kepala Sekolah"}
               {currentStep === 3 && "Pengisian Data Khusus & Komposisi Penugasan"}
@@ -372,21 +372,55 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
             </h2>
           </div>
 
-          <div className="flex items-center gap-1">
-            {[1, 2, 3, 4, 5].map((s) => (
-              <div
-                key={s}
-                className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center transition-all ${
-                  currentStep === s
-                    ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/30"
-                    : currentStep > s
-                    ? "bg-emerald-100 text-emerald-800"
-                    : "bg-slate-100 text-slate-400"
-                }`}
-              >
-                {currentStep > s ? "✓" : s}
-              </div>
-            ))}
+          {/* Interactive Step Navigation Bar (Aktif di Semua Perangkat) */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            {[
+              { num: 1, label: "Jenis SK" },
+              { num: 2, label: "Data Sekolah" },
+              { num: 3, label: "Data Khusus" },
+              { num: 4, label: "Draf Formal AI" },
+              { num: 5, label: "AI Refiner" },
+            ].map(({ num: s, label }) => {
+              const isActive = currentStep === s;
+              const isPast = currentStep > s;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  id={`btn-step-nav-${s}`}
+                  onClick={() => {
+                    if (s === 4 && !draftDoc) {
+                      handleGenerateDraft();
+                    } else if (s === 5 && !draftDoc) {
+                      handleGenerateDraft();
+                    } else {
+                      setCurrentStep(s);
+                    }
+                  }}
+                  title={`Langkah ${s}: ${label} (Klik untuk beralih)`}
+                  className={`group flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    isActive
+                      ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/30 ring-2 ring-emerald-500"
+                      : isPast
+                      ? "bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  <span
+                    className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 ${
+                      isActive
+                        ? "bg-white text-emerald-700"
+                        : isPast
+                        ? "bg-emerald-600 text-white"
+                        : "bg-slate-200 text-slate-600"
+                    }`}
+                  >
+                    {isPast ? "✓" : s}
+                  </span>
+                  <span className="hidden md:inline whitespace-nowrap text-[11px]">{label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -478,21 +512,33 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
             })}
           </div>
 
-          <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+          <div className="flex flex-wrap justify-between items-center gap-3 pt-4 border-t border-slate-100">
             <button
               onClick={onCancel}
               className="text-xs text-slate-500 hover:text-slate-700 font-medium cursor-pointer"
             >
               Batal
             </button>
-            <button
-              id="btn-step1-next"
-              onClick={() => setCurrentStep(2)}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm cursor-pointer"
-            >
-              <span>Langkah 2: Data Sekolah</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                id="btn-step1-quick-ai"
+                onClick={handleGenerateDraft}
+                className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-semibold px-4 py-2.5 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                title="Langsung susun draf formal SK dengan AI tanpa melewati Langkah 2 & 3"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Langsung Susun Draf Formal AI (1-Klik)</span>
+              </button>
+              <button
+                id="btn-step1-next"
+                onClick={() => setCurrentStep(2)}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm cursor-pointer"
+              >
+                <span>Langkah 2: Data Sekolah</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -553,7 +599,7 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
             mengubahnya kapan saja di menu <strong>Data Sekolah</strong>.
           </div>
 
-          <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+          <div className="flex flex-wrap justify-between items-center gap-3 pt-4 border-t border-slate-100">
             <button
               onClick={() => setCurrentStep(1)}
               className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 font-medium cursor-pointer"
@@ -561,14 +607,26 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
               <ArrowLeft className="w-4 h-4" />
               <span>Kembali</span>
             </button>
-            <button
-              id="btn-step2-next"
-              onClick={() => setCurrentStep(3)}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm cursor-pointer"
-            >
-              <span>Langkah 3: Data Khusus SK</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                id="btn-step2-quick-ai"
+                onClick={handleGenerateDraft}
+                className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-semibold px-4 py-2.5 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                title="Langsung susun draf formal SK dengan AI"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Langsung Susun Draf Formal AI</span>
+              </button>
+              <button
+                id="btn-step2-next"
+                onClick={() => setCurrentStep(3)}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm cursor-pointer"
+              >
+                <span>Langkah 3: Data Khusus SK</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -576,15 +634,27 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
       {/* STEP 3: DATA KHUSUS SK */}
       {currentStep === 3 && (
         <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm space-y-6 animate-fade-in">
-          <div>
-            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-emerald-600" />
-              <span>Parameter Khusus untuk {selectedSKType}</span>
-            </h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Lengkapi nomor surat keputusan, tanggal rapat dewan guru, dan pilih daftar guru yang
-              akan dicantumkan di lampiran.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-emerald-600" />
+                <span>Parameter Khusus untuk {selectedSKType}</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Lengkapi nomor surat keputusan, tanggal rapat dewan guru, dan pilih daftar guru yang
+                akan dicantumkan di lampiran.
+              </p>
+            </div>
+            <button
+              type="button"
+              id="btn-step3-quick-generate-top"
+              onClick={handleGenerateDraft}
+              className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors cursor-pointer shrink-0"
+              title="Lompat langsung ke Langkah 4 dan susun draf formal"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Susun Draf Formal Sekarang (Langkah 4)</span>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
@@ -805,15 +875,19 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
           {isGenerating ? (
             <div className="py-12 space-y-4">
               <Loader2 className="w-10 h-10 text-emerald-600 animate-spin mx-auto" />
-              <div className="space-y-1">
+              <div className="space-y-1.5 max-w-md mx-auto">
                 <h3 className="text-base font-bold text-slate-900">
                   AI sedang menyusun draf Surat Keputusan resmi...
                 </h3>
-                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                <p className="text-xs text-slate-500">
                   Menyusun konsiderans Menimbang, memeriksa dasar hukum Mengingat terkini,
                   merumuskan diktum MEMUTUSKAN KESATU - KEDELAPAN, serta mengompilasi lampiran tabel
                   guru dan PTK.
                 </p>
+                <div className="pt-2 flex items-center justify-center gap-2 text-[11px] text-emerald-700 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                  <span>Sedang diproses oleh Gemini AI (rata-rata 3-8 detik)...</span>
+                </div>
               </div>
             </div>
           ) : draftDoc ? (
@@ -911,16 +985,37 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
               )}
             </div>
           ) : (
-            <div className="py-8 text-center space-y-3">
-              <p className="text-xs text-slate-600">Draf belum terbentuk. Silakan klik tombol di bawah untuk menyusun draf otomatis.</p>
-              <button
-                type="button"
-                onClick={() => handleGenerateDraft()}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Susun Draf Format Baku Sekarang</span>
-              </button>
+            <div className="py-10 max-w-lg mx-auto text-center space-y-4">
+              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-slate-900">
+                  Penyusunan Draf Formal oleh AI Siap Dijalankan
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Sistem siap merumuskan draf baku <strong>{selectedSKType}</strong> dengan konsiderans Menimbang, dasar hukum Mengingat, Diktum Memutuskan, dan tabel penugasan guru secara otomatis.
+                </p>
+              </div>
+              <div className="pt-2 flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  id="btn-step4-trigger-ai"
+                  onClick={() => handleGenerateDraft()}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Mulai Susun Draf Formal dengan AI Sekarang</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(3)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Kembali ke Langkah 3</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
