@@ -86,6 +86,7 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
   // Step 4 & 5: AI Generated Draft & Refinements
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [draftDoc, setDraftDoc] = useState<SKDocument | null>(initialDoc || null);
+  const [draftSource, setDraftSource] = useState<string>("");
   const [refineInstruction, setRefineInstruction] = useState<string>("");
   const [isRefining, setIsRefining] = useState<boolean>(false);
   const [refineHistory, setRefineHistory] = useState<string[]>([]);
@@ -169,9 +170,14 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
         }),
       });
 
+      if (!response.ok) {
+        throw new Error(`Server status ${response.status}`);
+      }
+
       const resJson = await response.json();
       if (resJson.success && resJson.data) {
         const data = resJson.data;
+        setDraftSource(resJson.source || "gemini");
         const newDoc: SKDocument = {
           id: `sk-${Date.now()}`,
           nomor: nomorSK,
@@ -236,6 +242,7 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
       }
     } catch (err) {
       console.warn("Generating client-side safe default draft:", err);
+      setDraftSource("local-fallback");
       // Construct complete safe official fallback draft
       const clientFallbackDoc: SKDocument = {
         id: `sk-${Date.now()}`,
@@ -813,9 +820,21 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
             <div className="space-y-6 text-left">
               <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                 <div>
-                  <div className="flex items-center gap-2 text-emerald-700 text-xs font-bold uppercase tracking-wider">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Draf SK Berhasil Disusun!</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1.5 text-emerald-700 text-xs font-bold uppercase tracking-wider">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Draf SK Berhasil Disusun!</span>
+                    </div>
+                    {draftSource && (draftSource.includes("gemini") || draftSource.includes("flash")) ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        <Sparkles className="w-3 h-3 text-emerald-600" />
+                        Disusun oleh AI Gemini ({draftSource})
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-300">
+                        Format Standar Tata Naskah
+                      </span>
+                    )}
                   </div>
                   <h3 className="text-base font-bold text-slate-900 mt-1">
                     {draftDoc.judul}

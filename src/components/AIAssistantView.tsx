@@ -88,6 +88,10 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
         }),
       });
 
+      if (!response.ok) {
+        throw new Error(`Server returned status ${response.status}`);
+      }
+
       const resJson = await response.json();
       if (resJson.success) {
         // Detect if the user was asking to create an SK

@@ -32,15 +32,31 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json({ limit: "10mb" }));
 
+// Helper to retrieve effective API key from environment or fallback paths
+function getGeminiKey(): string {
+  const directKey = (
+    process.env.GEMINI_API_KEY ||
+    process.env.API_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    ""
+  ).trim();
+  if (directKey) return directKey;
+
+  reloadEnvVariables();
+  return (
+    process.env.GEMINI_API_KEY ||
+    process.env.API_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    ""
+  ).trim();
+}
+
 // Initialize Gemini SDK lazily if key is provided
 let aiClient: GoogleGenAI | null = null;
 let currentKeyUsed: string = "";
 
 function getGemini(): GoogleGenAI | null {
-  if (!process.env.GEMINI_API_KEY) {
-    reloadEnvVariables();
-  }
-  const key = (process.env.GEMINI_API_KEY || "").trim();
+  const key = getGeminiKey();
   if (!key) {
     return null;
   }
@@ -59,9 +75,10 @@ function getGemini(): GoogleGenAI | null {
 }
 
 // Officially supported Gemini models in prioritized fallback order
+// 'gemini-3.1-flash-lite' is prioritized first for ultra-fast generation (1-10s) and minimal latency spikes
 const CANDIDATE_TEXT_MODELS = [
-  "gemini-3.8-flash",
   "gemini-3.1-flash-lite",
+  "gemini-3.8-flash",
   "gemini-flash-latest",
 ];
 
@@ -78,35 +95,41 @@ async function generateContentWithFallback(
   params: {
     contents: any;
     config?: any;
+    timeoutMs?: number;
   }
 ): Promise<{ text: string; model: string }> {
   let lastError: any = null;
+  const timeoutMs = params.timeoutMs || 45000;
 
   for (const modelName of CANDIDATE_TEXT_MODELS) {
     // Retry up to 2 attempts for transient conditions (e.g. 503 high demand spike, 429 rate limit)
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
+        console.log(`[AI Generator] Menggunakan model ${modelName} (percobaan ${attempt + 1})...`);
         const res = await withTimeout(
           ai.models.generateContent({
             model: modelName,
             contents: params.contents,
             config: params.config,
           }),
-          20000,
-          `Batas waktu pembuatan draf AI ${modelName} habis (20 detik)`
+          timeoutMs,
+          `Batas waktu pembuatan draf AI ${modelName} habis (${Math.round(timeoutMs / 1000)} detik)`
         );
         if (res.text) {
+          console.log(`[AI Generator] Berhasil menghasilkan konten dengan ${modelName} (${res.text.length} karakter).`);
           return { text: res.text, model: modelName };
         }
       } catch (err: any) {
         lastError = err;
         const msg = err?.message || String(err);
+        console.warn(`[AI Generator] Model ${modelName} gagal: ${msg}`);
         const isTransient =
           msg.includes("503") ||
           msg.includes("UNAVAILABLE") ||
           msg.includes("high demand") ||
           msg.includes("429") ||
-          msg.includes("Resource has been exhausted");
+          msg.includes("Resource has been exhausted") ||
+          msg.includes("habis");
         if (isTransient && attempt === 0) {
           // Brief pause before retry
           await new Promise((r) => setTimeout(r, 600));
@@ -126,9 +149,11 @@ async function createChatWithFallback(
     history?: any[];
     config?: any;
     message: string;
+    timeoutMs?: number;
   }
 ): Promise<{ text: string; model: string }> {
   let lastError: any = null;
+  const timeoutMs = params.timeoutMs || 30000;
 
   for (const modelName of CANDIDATE_TEXT_MODELS) {
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -140,8 +165,8 @@ async function createChatWithFallback(
         });
         const res = await withTimeout(
           chat.sendMessage({ message: params.message }),
-          20000,
-          `Batas waktu respon asisten AI ${modelName} habis (20 detik)`
+          timeoutMs,
+          `Batas waktu respon asisten AI ${modelName} habis (${Math.round(timeoutMs / 1000)} detik)`
         );
         if (res.text) {
           return { text: res.text, model: modelName };
@@ -154,7 +179,8 @@ async function createChatWithFallback(
           msg.includes("UNAVAILABLE") ||
           msg.includes("high demand") ||
           msg.includes("429") ||
-          msg.includes("Resource has been exhausted");
+          msg.includes("Resource has been exhausted") ||
+          msg.includes("habis");
         if (isTransient && attempt === 0) {
           await new Promise((r) => setTimeout(r, 600));
           continue;
@@ -171,7 +197,8 @@ async function createChatWithFallback(
 app.get("/api/health", (_req: Request, res: Response) => {
   res.json({
     status: "ok",
-    hasApiKey: Boolean(process.env.GEMINI_API_KEY),
+    hasApiKey: Boolean(getGeminiKey()),
+    model: CANDIDATE_TEXT_MODELS[0],
     time: new Date().toISOString(),
   });
 });
@@ -579,6 +606,7 @@ Keluarkan HANYA JSON murni yang valid tanpa awalan \`\`\`json atau karakter mark
           responseMimeType: "application/json",
           temperature: 0.2,
         },
+        timeoutMs: 45000,
       });
       rawText = aiResult.text || "{}";
       usedModel = aiResult.model;
@@ -729,6 +757,7 @@ Berikan draf SK yang diperbarui dalam JSON valid.`;
           responseMimeType: "application/json",
           temperature: 0.2,
         },
+        timeoutMs: 40000,
       });
       raw = aiResult.text || "{}";
     } catch (err: any) {
