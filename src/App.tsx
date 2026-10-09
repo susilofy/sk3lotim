@@ -304,6 +304,8 @@ export default function App() {
     const cleanDoc: SKDocument = {
       ...doc,
       judul: cleanSKJudul(doc.judul, doc.tahunAjaran),
+      status: "published",
+      updatedAt: new Date().toISOString(),
     };
     // Otomatis simpan nilai isian tahun ajaran, tanggal penetapan, dan memperhatikan sebagai data bawaan
     saveDefaultSKParams({
@@ -317,16 +319,17 @@ export default function App() {
     const exists = documents.some((d) => d.id === cleanDoc.id);
     if (exists) {
       setDocuments((prev) =>
-        prev.map((d) => (d.id === cleanDoc.id ? { ...cleanDoc, status: "published" } : d))
+        prev.map((d) => (d.id === cleanDoc.id ? cleanDoc : d))
       );
     } else {
-      setDocuments((prev) => [{ ...cleanDoc, status: "published" }, ...prev]);
+      setDocuments((prev) => [cleanDoc, ...prev]);
       setNumberingConfig((prev) => ({
         ...prev,
         lastNumber: prev.lastNumber + 1,
       }));
     }
     setIsBuildingSK(false);
+    setEditingDoc(null);
     setPreviewingDoc(cleanDoc);
   };
 

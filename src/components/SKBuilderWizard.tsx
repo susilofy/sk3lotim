@@ -28,6 +28,7 @@ import {
   Trash2,
   BookmarkCheck,
   Check,
+  RefreshCw,
 } from "lucide-react";
 import { getSavedDefaultSKParams, saveDefaultSKParams } from "../utils/storage";
 
@@ -82,11 +83,12 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
     employees.map((e) => e.id)
   );
   const [defaultSavedSuccess, setDefaultSavedSuccess] = useState<string | null>(null);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
   // Step 4 & 5: AI Generated Draft & Refinements
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [draftDoc, setDraftDoc] = useState<SKDocument | null>(initialDoc || null);
-  const [draftSource, setDraftSource] = useState<string>("");
+  const [draftSource, setDraftSource] = useState<string>(initialDoc ? "arsip" : "");
   const [refineInstruction, setRefineInstruction] = useState<string>("");
   const [isRefining, setIsRefining] = useState<boolean>(false);
   const [refineHistory, setRefineHistory] = useState<string[]>([]);
@@ -95,6 +97,21 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
   const handleSelectType = (typeName: string) => {
     setSelectedSKType(typeName);
     setIsCustomMode(typeName === "SK Lainnya (Custom AI)");
+    // Update existing draft title and category in real-time
+    if (draftDoc) {
+      const categoryObj = skCategories.find((c) => c.nama === typeName);
+      const defaultJudul = categoryObj ? categoryObj.defaultJudul : typeName.toUpperCase();
+      setDraftDoc((prev) =>
+        prev
+          ? {
+              ...prev,
+              jenisSK: typeName,
+              judul: cleanSKJudul(defaultJudul, prev.tahunAjaran || tahunAjaran),
+              updatedAt: new Date().toISOString(),
+            }
+          : null
+      );
+    }
   };
 
   // Helper format Memperhatikan secara rapi dan menjaga data bawaan
@@ -128,6 +145,311 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
     }`;
   };
 
+  // Helper membuat tabel lampiran aman untuk berbagai kategori SK
+  const createSafeLampiran = (jenis: string, relevantList: Employee[]): SKAttachment[] => {
+    const lower = (jenis || "").toLowerCase();
+    if (lower.includes("bosp") || lower.includes("bos")) {
+      return [
+        {
+          id: "att-1",
+          nomorLampiran: "Lampiran I",
+          judul: "Susunan Tim Pengelola Bantuan Operasional Satuan Pendidikan (BOSP)",
+          jenisLampiran: "susunan_panitia",
+          headers: ["No", "Nama / NIP", "Jabatan Kedinasan", "Jabatan dalam Tim", "Uraian Tugas Pokok"],
+          rows:
+            relevantList.length > 0
+              ? relevantList.map((e, i) => [
+                  String(i + 1),
+                  `${e.nama}\n${e.nip && e.nip !== "-" ? (e.statusKepegawaian === "PPPK" ? `NIPPPK. ${e.nip}` : `NIP. ${e.nip}`) : "NIP. -"}`,
+                  e.jabatan || "Guru Kelas",
+                  i === 0 ? "Bendahara BOSP" : i === 1 ? "Anggota (Perencana)" : "Anggota Tim",
+                  i === 0
+                    ? "Mengelola pembukuan, pembayaran, pajak, dan laporan BKU/K7"
+                    : "Membantu penyusunan RKAS & verifikasi bukti transaksi",
+                ])
+              : [
+                  ["1", "Bendahara BOSP\nNIP. -", "Guru Kelas", "Bendahara BOSP", "Mengelola pembukuan dan SPJ"],
+                ],
+          footerNote: "Tim bekerja secara kolektif kolegial dan bertanggung jawab kepada Kepala Sekolah.",
+        },
+      ];
+    }
+
+    if (lower.includes("tppk") || lower.includes("kekerasan")) {
+      return [
+        {
+          id: "att-1",
+          nomorLampiran: "Lampiran I",
+          judul: "Susunan Tim Pencegahan dan Penanganan Kekerasan (TPPK)",
+          jenisLampiran: "susunan_panitia",
+          headers: ["No", "Nama / NIP", "Unsur Keterwakilan", "Jabatan dalam Tim", "Keterangan"],
+          rows:
+            relevantList.length > 0
+              ? relevantList.map((e, i) => [
+                  String(i + 1),
+                  `${e.nama}\n${e.nip && e.nip !== "-" ? (e.statusKepegawaian === "PPPK" ? `NIPPPK. ${e.nip}` : `NIP. ${e.nip}`) : "NIP. -"}`,
+                  "Pendidik / Satuan Pendidikan",
+                  i === 0 ? "Koordinator TPPK" : "Anggota",
+                  "Unsur Guru",
+                ])
+              : [
+                  ["1", "Guru Koordinator\nNIP. -", "Pendidik", "Koordinator", "Unsur Guru"],
+                ],
+          footerNote: "Keanggotaan TPPK wajib didaftarkan pada Portal Resmi Kemendikbudristek/Dapodik.",
+        },
+      ];
+    }
+
+    if (lower.includes("kurikulum") || lower.includes("tpk") || lower.includes("ksp") || lower.includes("kosp")) {
+      return [
+        {
+          id: "att-1",
+          nomorLampiran: "Lampiran I",
+          judul: "Susunan Tim Pengembang Kurikulum Satuan Pendidikan (TPK)",
+          jenisLampiran: "susunan_panitia",
+          headers: ["No", "Nama / NIP", "Pangkat / Gol", "Jabatan Kedinasan", "Jabatan dalam Tim"],
+          rows:
+            relevantList.length > 0
+              ? relevantList.map((e, i) => [
+                  String(i + 1),
+                  `${e.nama}\n${e.nip && e.nip !== "-" ? (e.statusKepegawaian === "PPPK" ? `NIPPPK. ${e.nip}` : `NIP. ${e.nip}`) : "NIP. -"}`,
+                  e.golongan ? `${e.pangkat || "-"}\n/${e.golongan}` : "-",
+                  e.jabatan || "Guru Kelas",
+                  i === 0 ? "Ketua Tim Pengembang" : i === 1 ? "Sekretaris Tim" : "Anggota",
+                ])
+              : [
+                  ["1", "Ketua Tim\nNIP. -", "Ahli Pertama / IX", "Guru Kelas", "Ketua Tim"],
+                ],
+          footerNote: "Dokumen kurikulum disahkan oleh Kepala Sekolah dan divalidasi Pengawas Pembina.",
+        },
+      ];
+    }
+
+    // Default: Pembagian Tugas Guru KBM
+    return [
+      {
+        id: "att-1",
+        nomorLampiran: "Lampiran I",
+        judul: "Pembagian Tugas Pembelajaran dan Tugas Tambahan",
+        jenisLampiran: "pembagian_tugas_guru",
+        headers: ["No", "Nama / NIP", "Pangkat / Gol", "Jabatan Kedinasan", "Tugas Utama", "Keterangan"],
+        rows:
+          relevantList.length > 0
+            ? relevantList.map((e, i) => [
+                String(i + 1),
+                `${e.nama}\n${e.nip && e.nip !== "-" ? (e.statusKepegawaian === "PPPK" ? `NIPPPK. ${e.nip}` : `NIP. ${e.nip}`) : "NIP. -"}`,
+                e.golongan ? `${e.pangkat || "-"}\n/${e.golongan}` : "-",
+                e.jabatan || "Guru Kelas",
+                e.mapel || "Tematik / Semua Mata Pelajaran",
+                e.kelas ? `Kelas ${e.kelas}` : "Aktif",
+              ])
+            : [
+                ["1", "Guru Kelas\nNIP. -", "-", "Guru Kelas", "Tematik", "Kelas I"],
+              ],
+        footerNote: "Beban kerja guru telah disesuaikan dengan ketentuan regulasi pemenuhan jam kerja.",
+      },
+    ];
+  };
+
+  // Helper membangun naskah draf formal lengkap untuk client fallback
+  const createSafeClientSKDraft = (params: {
+    id: string;
+    nomorSK: string;
+    judul: string;
+    selectedSKType: string;
+    tahunAjaran: string;
+    tanggalTetap: string;
+    tempatTetap: string;
+    tanggalRapat: string;
+    profile: SchoolProfile;
+    relevantEmployees: Employee[];
+    status?: "draft" | "siap_cetak" | "disahkan" | "diarsipkan" | "published";
+  }): SKDocument => {
+    const {
+      id,
+      nomorSK: curNomor,
+      judul: curJudul,
+      selectedSKType: curJenis,
+      tahunAjaran: curTahun,
+      tanggalTetap: curTglTetap,
+      tempatTetap: curTempat,
+      tanggalRapat: curTglRapat,
+      profile: curProf,
+      relevantEmployees: curEmps,
+      status: curStatus = "draft",
+    } = params;
+
+    const lower = (curJenis || "").toLowerCase();
+    let menimbang = [
+      `Bahwa untuk memperlancar jalannya kegiatan belajar mengajar dan tertib administrasi di ${curProf.nama}, dipandang perlu menetapkan keputusan kepala sekolah.`,
+      `Bahwa yang namanya tercantum dalam lampiran keputusan ini dipandang cakap dan memenuhi syarat untuk melaksanakan tugas yang diamanahkan.`,
+    ];
+    let mengingat = [
+      "Undang-undang Nomor 20 Tahun 2003 tentang Sistem Pendidikan Nasional;",
+      "Peraturan Pemerintah Nomor 4 Tahun 2022 tentang Standar Nasional Pendidikan;",
+      "Peraturan Menteri Pendidikan Dasar dan Menengah RI Nomor 12 Tahun 2025 tentang Standar Isi;",
+      "Peraturan Menteri Pendidikan Dasar dan Menengah RI Nomor 13 Tahun 2025 tentang Kurikulum;",
+    ];
+    let diktum: SKDiktum[] = [
+      { poin: "KESATU", isi: `Menetapkan keputusan tentang ${curJenis} sebagaimana tercantum dalam lampiran keputusan ini.` },
+      { poin: "KEDUA", isi: "Masing-masing pendidik dan tenaga kependidikan wajib melaporkan pelaksanaan tugasnya secara tertulis dan berkala." },
+      { poin: "KETIGA", isi: "Segala biaya yang timbul dibebankan pada anggaran sekolah yang relevan." },
+      { poin: "KEEMPAT", isi: "Keputusan ini berlaku sejak tanggal ditetapkan." },
+    ];
+
+    if (lower.includes("bosp") || lower.includes("bos")) {
+      menimbang = [
+        `Bahwa dalam rangka memperlancar pengelolaan dan pertanggungjawaban dana Bantuan Operasional Satuan Pendidikan (BOSP) di ${curProf.nama}, dipandang perlu membentuk Tim Pengelola BOSP.`,
+        `Bahwa mereka yang namanya tercantum dalam lampiran keputusan ini dianggap mampu dan memenuhi syarat untuk melaksanakan tugas pengelolaan dana BOSP.`,
+        `Bahwa berdasarkan pertimbangan sebagaimana dimaksud, perlu menetapkan Keputusan Kepala Sekolah tentang Tim Pengelola BOSP.`,
+      ];
+      mengingat = [
+        "Undang-undang Nomor 20 Tahun 2003 tentang Sistem Pendidikan Nasional;",
+        "Peraturan Pemerintah Nomor 4 Tahun 2022 tentang Standar Nasional Pendidikan;",
+        "Peraturan Menteri Pendidikan, Kebudayaan, Riset, dan Teknologi RI Nomor 63 Tahun 2022 jo Nomor 63 Tahun 2023 tentang Petunjuk Teknis Pengelolaan Dana BOSP;",
+        "Peraturan Menteri Pendidikan, Kebudayaan, Riset, dan Teknologi Nomor 18 Tahun 2023 tentang Standar Pembiayaan;",
+        `Keputusan Bupati ${curProf.kabupaten} tentang Alokasi Dana BOSP Satuan Pendidikan Dasar.`,
+      ];
+      diktum = [
+        { poin: "KESATU", isi: "Membentuk Tim Pengelola Bantuan Operasional Satuan Pendidikan (BOSP) sebagaimana tercantum pada lampiran keputusan ini." },
+        { poin: "KEDUA", isi: "Tim Pengelola BOSP bertugas merencanakan (RKT/RKAS), mengelola, membukukan, serta mempertanggungjawabkan penggunaan dana BOSP sesuai ketentuan petunjuk teknis." },
+        { poin: "KETIGA", isi: "Segala biaya yang timbul dibebankan pada anggaran BOSP yang bersangkutan." },
+        { poin: "KEEMPAT", isi: "Keputusan ini berlaku sejak tanggal ditetapkan." },
+      ];
+    } else if (lower.includes("tppk") || lower.includes("kekerasan")) {
+      menimbang = [
+        `Bahwa peserta didik, pendidik, dan tenaga kependidikan berhak mendapatkan perlindungan dari segala bentuk kekerasan di lingkungan satuan pendidikan.`,
+        `Bahwa untuk mewujudkan lingkungan satuan pendidikan yang aman, ramah, dan inklusif di ${curProf.nama}, perlu dibentuk Tim Pencegahan dan Penanganan Kekerasan (TPPK).`,
+      ];
+      mengingat = [
+        "Undang-undang Nomor 20 Tahun 2003 tentang Sistem Pendidikan Nasional;",
+        "Undang-undang Nomor 35 Tahun 2014 tentang Perubahan atas UU Nomor 23 Tahun 2002 tentang Perlindungan Anak;",
+        "Peraturan Menteri Pendidikan, Kebudayaan, Riset, dan Teknologi Nomor 46 Tahun 2023 tentang Pencegahan dan Penanganan Kekerasan di Satuan Pendidikan (PPKSP);",
+      ];
+      diktum = [
+        { poin: "KESATU", isi: "Membentuk Tim Pencegahan dan Penanganan Kekerasan (TPPK) sebagaimana tercantum dalam lampiran keputusan ini." },
+        { poin: "KEDUA", isi: "TPPK bertugas mengoordinasikan pencegahan kekerasan, menerima laporan, memfasilitasi penanganan, dan berkoordinasi dengan dinas terkait." },
+        { poin: "KETIGA", isi: "Masa tugas TPPK adalah 2 (dua) tahun sejak tanggal ditetapkan." },
+        { poin: "KEEMPAT", isi: "Keputusan ini berlaku sejak tanggal ditetapkan." },
+      ];
+    }
+
+    return {
+      id,
+      nomor: curNomor || `421.2/08/SDN3LT/${curTahun}`,
+      judul: cleanSKJudul(curJudul, curTahun) || curJenis.toUpperCase(),
+      jenisSK: curJenis,
+      tahunAjaran: curTahun,
+      tanggalTetap: curTglTetap,
+      tempatTetap: curTempat,
+      tanggalRapat: curTglRapat,
+      perihalRapat: `Rapat Dewan Guru tentang ${curJenis}`,
+      menimbang,
+      mengingat,
+      memperhatikan: formatMemperhatikanText(curTglRapat, curProf.nama, curJenis),
+      diktum,
+      tembusan: [
+        `Kepala Dinas Pendidikan Kepemudaan dan Olahraga Kabupaten ${curProf.kabupaten}`,
+        `Korwil Satuan Pendidikan Formal Kecamatan ${curProf.kecamatan}`,
+        "Pengawas Sekolah Pembina",
+        "Ketua Komite Sekolah",
+        "Arsip Sekolah",
+      ],
+      lampiranList: createSafeLampiran(curJenis, curEmps),
+      status: curStatus,
+      kepalaSekolah: curProf.kepalaSekolah,
+      sekolah: {
+        nama: curProf.nama,
+        alamat: curProf.alamat,
+        kabupaten: curProf.kabupaten,
+        kecamatan: curProf.kecamatan,
+      },
+      aiNotes: ["Draf telah diselaraskan dengan tata naskah dinas resmi dan regulasi kependidikan."],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  };
+
+  // Helper sinkronisasi aktif: menjamin seluruh perubahan di Tahap 1, 2, dan 3 selalu tersinkron ke draftDoc
+  const syncCurrentDraft = (customBase?: SKDocument | null): SKDocument => {
+    const base = customBase || draftDoc || initialDoc;
+    const relevantEmployees = employees.filter((e) =>
+      selectedEmployeeIds.includes(e.id)
+    );
+    const categoryObj = skCategories.find((c) => c.nama === selectedSKType);
+    const judul = categoryObj ? categoryObj.defaultJudul : selectedSKType.toUpperCase();
+    const docId = initialDoc?.id || draftDoc?.id || `sk-${Date.now()}`;
+    const docStatus = (initialDoc?.status || draftDoc?.status || "draft") as any;
+
+    if (!base) {
+      const created = createSafeClientSKDraft({
+        id: docId,
+        nomorSK,
+        judul,
+        selectedSKType,
+        tahunAjaran,
+        tanggalTetap,
+        tempatTetap,
+        tanggalRapat,
+        profile,
+        relevantEmployees,
+        status: docStatus,
+      });
+      setDraftDoc(created);
+      return created;
+    }
+
+    const updatedLampiran =
+      base.lampiranList && base.lampiranList.length > 0
+        ? base.lampiranList.map((att, idx) => {
+            if (idx === 0) {
+              return {
+                ...att,
+                rows:
+                  relevantEmployees.length > 0
+                    ? relevantEmployees.map((e, i) => [
+                        String(i + 1),
+                        `${e.nama}\n${e.nip && e.nip !== "-" ? (e.statusKepegawaian === "PPPK" ? `NIPPPK. ${e.nip}` : `NIP. ${e.nip}`) : "NIP. -"}`,
+                        e.golongan ? `${e.pangkat || "-"}\n/${e.golongan}` : "-",
+                        e.jabatan || "Guru Kelas",
+                        e.mapel || "Tematik / Semua Mata Pelajaran",
+                        e.kelas ? `Kelas ${e.kelas}` : "Aktif",
+                      ])
+                    : att.rows,
+              };
+            }
+            return att;
+          })
+        : createSafeLampiran(selectedSKType, relevantEmployees);
+
+    const synced: SKDocument = {
+      ...base,
+      id: docId,
+      nomor: nomorSK,
+      tahunAjaran,
+      tanggalTetap,
+      tempatTetap,
+      tanggalRapat,
+      perihalRapat: `Rapat Dewan Guru tentang ${selectedSKType}`,
+      memperhatikan: formatMemperhatikanText(tanggalRapat, profile.nama, selectedSKType),
+      jenisSK: selectedSKType,
+      judul: cleanSKJudul(base.judul || judul, tahunAjaran),
+      sekolah: {
+        nama: profile.nama,
+        alamat: profile.alamat,
+        kabupaten: profile.kabupaten,
+        kecamatan: profile.kecamatan,
+      },
+      kepalaSekolah: profile.kepalaSekolah,
+      lampiranList: updatedLampiran,
+      status: docStatus,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setDraftDoc(synced);
+    return synced;
+  };
+
   // Trigger AI Draft Generation (Step 4)
   const handleGenerateDraft = async () => {
     setIsGenerating(true);
@@ -147,6 +469,8 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
 
     const categoryObj = skCategories.find((c) => c.nama === selectedSKType);
     const judul = categoryObj ? categoryObj.defaultJudul : selectedSKType.toUpperCase();
+    const docId = initialDoc?.id || draftDoc?.id || `sk-${Date.now()}`;
+    const docStatus = (initialDoc?.status || draftDoc?.status || "draft") as any;
 
     try {
       const controller = new AbortController();
@@ -185,7 +509,7 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
         const data = resJson.data;
         setDraftSource(resJson.source || "gemini");
         const newDoc: SKDocument = {
-          id: `sk-${Date.now()}`,
+          id: docId,
           nomor: nomorSK,
           judul: cleanSKJudul(data.judul || judul, tahunAjaran),
           jenisSK: selectedSKType,
@@ -220,16 +544,29 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
             `Korwil SPF Kecamatan ${profile.kecamatan}`,
             "Arsip",
           ],
-          lampiranList: (data.lampiranList || []).map((att: any, idx: number) => ({
-            id: `att-${idx + 1}`,
-            nomorLampiran: att.nomorLampiran || `Lampiran ${idx + 1}`,
-            judul: att.judul || "Daftar Pembagian Tugas",
-            jenisLampiran: att.jenisLampiran || "pembagian_tugas_guru",
-            headers: att.headers || ["No", "Nama", "Jabatan", "Tugas"],
-            rows: att.rows || [],
-            footerNote: att.footerNote || "",
-          })),
-          status: "draft",
+          lampiranList:
+            data.lampiranList && data.lampiranList.length > 0
+              ? (data.lampiranList || []).map((att: any, idx: number) => ({
+                  id: `att-${idx + 1}`,
+                  nomorLampiran: att.nomorLampiran || `Lampiran ${idx + 1}`,
+                  judul: att.judul || "Daftar Pembagian Tugas",
+                  jenisLampiran: att.jenisLampiran || "pembagian_tugas_guru",
+                  headers: att.headers || ["No", "Nama", "Jabatan", "Tugas"],
+                  rows:
+                    att.rows && att.rows.length > 0
+                      ? att.rows
+                      : relevantEmployees.map((e, i) => [
+                          String(i + 1),
+                          `${e.nama}\n${e.nip && e.nip !== "-" ? (e.statusKepegawaian === "PPPK" ? `NIPPPK. ${e.nip}` : `NIP. ${e.nip}`) : "NIP. -"}`,
+                          e.golongan ? `${e.pangkat || "-"}\n/${e.golongan}` : "-",
+                          e.jabatan || "Guru Kelas",
+                          e.mapel || "Tematik / Semua Mata Pelajaran",
+                          e.kelas ? `Kelas ${e.kelas}` : "Aktif",
+                        ]),
+                  footerNote: att.footerNote || "",
+                }))
+              : createSafeLampiran(selectedSKType, relevantEmployees),
+          status: docStatus,
           kepalaSekolah: profile.kepalaSekolah,
           sekolah: {
             nama: profile.nama,
@@ -238,7 +575,7 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
             kecamatan: profile.kecamatan,
           },
           aiNotes: data.aiNotes || (resJson.warning ? [resJson.warning] : []),
-          createdAt: new Date().toISOString(),
+          createdAt: draftDoc?.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
 
@@ -249,71 +586,20 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
     } catch (err) {
       console.warn("Generating client-side safe default draft:", err);
       setDraftSource("local-fallback");
-      // Construct complete safe official fallback draft
-      const clientFallbackDoc: SKDocument = {
-        id: `sk-${Date.now()}`,
-        nomor: nomorSK || `421.2/08/SDN3LT/${tahunAjaran}`,
-        judul: cleanSKJudul(judul, tahunAjaran) || "PEMBAGIAN TUGAS GURU DALAM PROSES BELAJAR MENGAJAR DAN TUGAS TERTENTU",
-        jenisSK: selectedSKType,
+      // Construct complete safe official fallback draft for the exact selected category
+      const clientFallbackDoc = createSafeClientSKDraft({
+        id: docId,
+        nomorSK,
+        judul,
+        selectedSKType,
         tahunAjaran,
         tanggalTetap,
         tempatTetap,
         tanggalRapat,
-        perihalRapat: `Rapat Dewan Guru tentang ${selectedSKType}`,
-        menimbang: [
-          `Bahwa untuk memperlancar jalannya kegiatan belajar mengajar dan tertib administrasi di ${profile.nama}, dipandang perlu menetapkan pembagian tugas kerja.`,
-          `Bahwa yang namanya tercantum dalam lampiran keputusan ini dipandang cakap dan memenuhi syarat untuk melaksanakan tugas yang diamanahkan.`,
-        ],
-        mengingat: [
-          "Undang-undang Nomor 20 Tahun 2003 tentang Sistem Pendidikan Nasional;",
-          "Peraturan Pemerintah Nomor 4 Tahun 2022 tentang Standar Nasional Pendidikan;",
-          "Peraturan Menteri Pendidikan Dasar dan Menengah RI Nomor 12 Tahun 2025 tentang Standar Isi;",
-          "Peraturan Menteri Pendidikan Dasar dan Menengah RI Nomor 13 Tahun 2025 tentang Kurikulum;",
-        ],
-        memperhatikan: formatMemperhatikanText(tanggalRapat, profile.nama, selectedSKType),
-        diktum: [
-          { poin: "KESATU", isi: "Menetapkan pembagian tugas pendidik dan tenaga kependidikan sebagaimana tercantum dalam lampiran keputusan ini." },
-          { poin: "KEDUA", isi: "Masing-masing pendidik dan tenaga kependidikan wajib melaporkan pelaksanaan tugasnya secara tertulis dan berkala." },
-          { poin: "KETIGA", isi: "Segala biaya yang timbul dibebankan pada anggaran sekolah yang sah." },
-          { poin: "KEEMPAT", isi: "Keputusan ini berlaku sejak tanggal ditetapkan." },
-        ],
-        tembusan: [
-          `Kepala Dinas Pendidikan Kepemudaan dan Olahraga Kabupaten ${profile.kabupaten}`,
-          `Korwil Satuan Pendidikan Formal Kecamatan ${profile.kecamatan}`,
-          "Pengawas Sekolah Pembina",
-          "Ketua Komite Sekolah",
-          "Arsip Sekolah",
-        ],
-        lampiranList: [
-          {
-            id: "att-1",
-            nomorLampiran: "Lampiran I",
-            judul: "Pembagian Tugas Pembelajaran dan Tugas Tambahan",
-            jenisLampiran: "pembagian_tugas_guru",
-            headers: ["No", "Nama / NIP", "Pangkat / Gol", "Jabatan Kedinasan", "Tugas Utama", "Keterangan"],
-            rows: relevantEmployees.map((e, i) => [
-              String(i + 1),
-              `${e.nama}\n${e.nip && e.nip !== "-" ? (e.statusKepegawaian === "PPPK" ? `NIPPPK. ${e.nip}` : `NIP. ${e.nip}`) : "NIP. -"}`,
-              e.golongan ? `${e.pangkat || "-"}\n/${e.golongan}` : "-",
-              e.jabatan || "Guru Kelas",
-              e.mapel || "Tematik / Semua Mata Pelajaran",
-              e.kelas ? `Kelas ${e.kelas}` : "Aktif",
-            ]),
-            footerNote: "Beban kerja guru telah disesuaikan dengan ketentuan regulasi pemenuhan jam kerja.",
-          },
-        ],
-        status: "draft",
-        kepalaSekolah: profile.kepalaSekolah,
-        sekolah: {
-          nama: profile.nama,
-          alamat: profile.alamat,
-          kabupaten: profile.kabupaten,
-          kecamatan: profile.kecamatan,
-        },
-        aiNotes: ["Draf telah disusun otomatis menggunakan format baku tata naskah dinas sekolah."],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+        profile,
+        relevantEmployees,
+        status: docStatus,
+      });
       setDraftDoc(clientFallbackDoc);
     } finally {
       setIsGenerating(false);
@@ -395,6 +681,7 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
                   type="button"
                   id={`btn-step-nav-${s}`}
                   onClick={() => {
+                    syncCurrentDraft();
                     if (s === 4 && !draftDoc) {
                       handleGenerateDraft();
                     } else if (s === 5 && !draftDoc) {
@@ -538,7 +825,10 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
               </button>
               <button
                 id="btn-step1-next"
-                onClick={() => setCurrentStep(2)}
+                onClick={() => {
+                  syncCurrentDraft();
+                  setCurrentStep(2);
+                }}
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm cursor-pointer"
               >
                 <span>Langkah 2: Data Sekolah</span>
@@ -626,7 +916,10 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
               </button>
               <button
                 id="btn-step2-next"
-                onClick={() => setCurrentStep(3)}
+                onClick={() => {
+                  syncCurrentDraft();
+                  setCurrentStep(3);
+                }}
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm cursor-pointer"
               >
                 <span>Langkah 3: Data Khusus SK</span>
@@ -855,7 +1148,7 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+          <div className="flex flex-wrap justify-between items-center gap-3 pt-4 border-t border-slate-100">
             <button
               onClick={() => setCurrentStep(2)}
               className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 font-medium cursor-pointer"
@@ -863,23 +1156,45 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
               <ArrowLeft className="w-4 h-4" />
               <span>Kembali</span>
             </button>
-            <button
-              id="btn-step3-generate-ai"
-              onClick={handleGenerateDraft}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm cursor-pointer"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>Susun SK Otomatis dengan AI</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                id="btn-step3-next-sync"
+                onClick={() => {
+                  syncCurrentDraft();
+                  setCurrentStep(4);
+                }}
+                className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold px-4 py-2.5 rounded-lg border border-slate-300 transition-colors cursor-pointer"
+                title="Lanjut ke Langkah 4 dengan data saat ini yang telah disinkronkan"
+              >
+                <span>Langkah 4: Tinjau Draf SK</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+              <button
+                id="btn-step3-generate-ai"
+                onClick={handleGenerateDraft}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Susun SK Otomatis dengan AI</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* STEP 4: AI GENERATING / DRAFT REVIEW */}
       {currentStep === 4 && (
-        <div className="bg-white rounded-xl p-8 border border-slate-200 shadow-sm text-center space-y-4 animate-fade-in">
+        <div className="bg-white rounded-xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-5 animate-fade-in">
+          {syncNotice && (
+            <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-900 text-xs font-semibold flex items-center gap-2 animate-fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{syncNotice}</span>
+            </div>
+          )}
+
           {isGenerating ? (
-            <div className="py-12 space-y-4">
+            <div className="py-12 space-y-4 text-center">
               <Loader2 className="w-10 h-10 text-emerald-600 animate-spin mx-auto" />
               <div className="space-y-1.5 max-w-md mx-auto">
                 <h3 className="text-base font-bold text-slate-900">
@@ -898,12 +1213,12 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
             </div>
           ) : draftDoc ? (
             <div className="space-y-6 text-left">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-5">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="flex items-center gap-1.5 text-emerald-700 text-xs font-bold uppercase tracking-wider">
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>Draf SK Berhasil Disusun!</span>
+                      <span>Draf Formal SK Sesuai Regulasi Dinas</span>
                     </div>
                     {draftSource && (draftSource.includes("gemini") || draftSource.includes("flash")) ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
@@ -916,29 +1231,55 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
                       </span>
                     )}
                   </div>
-                  <h3 className="text-base font-bold text-slate-900 mt-1">
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 mt-1">
                     {draftDoc.judul}
                   </h3>
-                  <p className="text-xs text-slate-500">
-                    Nomor: {draftDoc.nomor} • Tahun Ajaran {draftDoc.tahunAjaran}
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Nomor: <span className="font-mono font-semibold text-slate-700">{draftDoc.nomor}</span> • Tahun Ajaran {draftDoc.tahunAjaran} • Ditetapkan di {draftDoc.tempatTetap}, {draftDoc.tanggalTetap}
                   </p>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    id="btn-step4-regenerate-ai"
+                    onClick={handleGenerateDraft}
+                    disabled={isGenerating}
+                    className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
+                    title="Susun ulang naskah draf dengan AI Gemini menggunakan data terkini"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-200" />
+                    <span>Susun Ulang AI</span>
+                  </button>
+                  <button
+                    id="btn-step4-sync-now"
+                    onClick={() => {
+                      syncCurrentDraft();
+                      setSyncNotice("Data Tahap 1, 2, dan 3 berhasil disinkronkan ke dalam naskah draf!");
+                      setTimeout(() => setSyncNotice(null), 3000);
+                    }}
+                    className="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold px-3 py-2 rounded-lg transition-colors cursor-pointer"
+                    title="Sinkronkan data nomor, tanggal, dan guru dari Tahap 1-3"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Sinkronkan Data</span>
+                  </button>
                   <button
                     id="btn-preview-draft"
-                    onClick={() => onPreviewSK(draftDoc)}
-                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold px-4 py-2 rounded-lg cursor-pointer"
+                    onClick={() => onPreviewSK(syncCurrentDraft())}
+                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2 rounded-lg cursor-pointer"
                   >
                     <Eye className="w-4 h-4" />
                     <span>Pratinjau A4</span>
                   </button>
                   <button
                     id="btn-step4-next-refine"
-                    onClick={() => setCurrentStep(5)}
-                    className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer"
+                    onClick={() => {
+                      syncCurrentDraft();
+                      setCurrentStep(5);
+                    }}
+                    className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer"
                   >
-                    <span>Langkah 5: Sempurnakan / AI Refiner</span>
+                    <span>Langkah 5: AI Refiner</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -1049,14 +1390,15 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
               <button
                 id="btn-preview-refine"
                 onClick={() => {
+                  const finalDoc = syncCurrentDraft(draftDoc);
                   saveDefaultSKParams({
-                    tahunAjaran: draftDoc.tahunAjaran,
-                    tanggalTetap: draftDoc.tanggalTetap,
-                    tempatTetap: draftDoc.tempatTetap,
-                    tanggalRapat: draftDoc.tanggalRapat || draftDoc.memperhatikan,
-                    memperhatikan: draftDoc.memperhatikan,
+                    tahunAjaran: finalDoc.tahunAjaran,
+                    tanggalTetap: finalDoc.tanggalTetap,
+                    tempatTetap: finalDoc.tempatTetap,
+                    tanggalRapat: finalDoc.tanggalRapat || finalDoc.memperhatikan,
+                    memperhatikan: finalDoc.memperhatikan,
                   });
-                  onPreviewSK(draftDoc);
+                  onPreviewSK(finalDoc);
                 }}
                 className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold px-4 py-2 rounded-lg cursor-pointer"
               >
@@ -1066,14 +1408,15 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
               <button
                 id="btn-save-to-archive"
                 onClick={() => {
+                  const finalDoc = syncCurrentDraft(draftDoc);
                   saveDefaultSKParams({
-                    tahunAjaran: draftDoc.tahunAjaran,
-                    tanggalTetap: draftDoc.tanggalTetap,
-                    tempatTetap: draftDoc.tempatTetap,
-                    tanggalRapat: draftDoc.tanggalRapat || draftDoc.memperhatikan,
-                    memperhatikan: draftDoc.memperhatikan,
+                    tahunAjaran: finalDoc.tahunAjaran,
+                    tanggalTetap: finalDoc.tanggalTetap,
+                    tempatTetap: finalDoc.tempatTetap,
+                    tanggalRapat: finalDoc.tanggalRapat || finalDoc.memperhatikan,
+                    memperhatikan: finalDoc.memperhatikan,
                   });
-                  onSaveSK(draftDoc);
+                  onSaveSK(finalDoc);
                 }}
                 className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer"
               >
@@ -1190,9 +1533,10 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
                   <input
                     type="text"
                     value={draftDoc.nomor}
-                    onChange={(e) =>
-                      setDraftDoc({ ...draftDoc, nomor: e.target.value })
-                    }
+                    onChange={(e) => {
+                      setNomorSK(e.target.value);
+                      setDraftDoc({ ...draftDoc, nomor: e.target.value });
+                    }}
                     className="w-full p-2 border border-slate-300 rounded font-mono"
                   />
                 </div>
@@ -1203,9 +1547,10 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
                   <input
                     type="text"
                     value={draftDoc.tanggalTetap}
-                    onChange={(e) =>
-                      setDraftDoc({ ...draftDoc, tanggalTetap: e.target.value })
-                    }
+                    onChange={(e) => {
+                      setTanggalTetap(e.target.value);
+                      setDraftDoc({ ...draftDoc, tanggalTetap: e.target.value });
+                    }}
                     className="w-full p-2 border border-slate-300 rounded"
                   />
                 </div>
