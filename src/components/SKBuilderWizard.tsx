@@ -149,9 +149,13 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
     const judul = categoryObj ? categoryObj.defaultJudul : selectedSKType.toUpperCase();
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+
       const response = await fetch("/api/gemini/generate-sk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           jenisSK: selectedSKType,
           judulSK: judul,
@@ -169,6 +173,8 @@ export const SKBuilderWizard: React.FC<SKBuilderWizardProps> = ({
           userPrompt: isCustomMode ? customPrompt : "",
         }),
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`Server status ${response.status}`);

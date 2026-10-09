@@ -10,6 +10,9 @@ import {
   BookOpen,
   ArrowRight,
   Lightbulb,
+  RefreshCw,
+  Wifi,
+  CheckCircle2,
 } from "lucide-react";
 
 interface Message {
@@ -17,6 +20,8 @@ interface Message {
   sender: "user" | "ai";
   text: string;
   timestamp: string;
+  isOfflineFallback?: boolean;
+  canRetryPrompt?: string;
   suggestedAction?: {
     label: string;
     skType: string;
@@ -27,6 +32,31 @@ interface AIAssistantViewProps {
   schoolProfile: SchoolProfile;
   employees: Employee[];
   onStartSKFromAssistant: (skType: string) => void;
+}
+
+// Client-side intelligent regulation knowledge engine for seamless multi-device & offline support
+function getClientLocalAssistantReply(
+  text: string,
+  school: SchoolProfile,
+  totalGuru: number
+): string {
+  const low = (text || "").toLowerCase();
+  if (low.includes("pembagian tugas") || low.includes("kbm") || low.includes("mengajar") || low.includes("jam")) {
+    return `📌 **Panduan Pembagian Tugas Guru & KBM (${school.nama}):**\n\n1. **Beban Kerja Wajib:** Berdasarkan Permendikbudristek dan petunjuk teknis linieritas sertifikasi guru, guru kelas & mata pelajaran wajib memenuhi beban mengajar minimal 24 jam tatap muka per minggu (maksimal 40 jam).\n2. **Ekuivalensi Beban Tambahan yang Diakui:**\n   • Wakil Kepala Sekolah: 12 jam tatap muka\n   • Kepala Perpustakaan Sekolah: 12 jam tatap muka\n   • Pembina Pramuka / Ekstrakurikuler: 2 jam tatap muka\n   • Koordinator P5 (Projek Penguatan Profil Pelajar Pancasila): 2 jam per rombongan belajar\n3. **Format Lampiran SK Resmi:**\n   • Lampiran I: Rincian Jadwal & Mata Pelajaran KBM\n   • Lampiran II: Pembagian Tugas Wali Kelas & Pembina Kegiatan\n   • Lampiran III: Penugasan Tenaga Kependidikan (Operator & Penjaga)\n   • Lampiran IV: Tugas Tambahan Khusus`;
+  }
+  if (low.includes("bos") || low.includes("bosp") || low.includes("anggaran") || low.includes("arkas")) {
+    return `📌 **Pedoman SK Tim Pengelola BOSP Reguler (${school.nama}):**\n\n1. **Regulasi Acuan:** Petunjuk Teknis Pengelolaan Dana BOSP terbaru dari Kemendikdasmen.\n2. **Susunan Tim Resmi di SD:**\n   • **Penanggung Jawab:** Kepala Sekolah (${school.kepalaSekolah.nama})\n   • **Bendahara BOSP:** Guru PNS/PPPK atau Tenaga Kependidikan yang cakap tata kelola keuangan\n   • **Anggota:** 1 orang perwakilan Guru dan 1 orang perwakilan Komite Sekolah / Wali Murid\n3. **Tupoksi Tim:** Menyusun perencanaan anggaran melalui aplikasi ARKAS, mengontrol realisasi belanja, menyusun SPJ, dan melaporkan secara transparan pada papan informasi sekolah.`;
+  }
+  if (low.includes("tppk") || low.includes("kekerasan") || low.includes("bully") || low.includes("perundungan")) {
+    return `📌 **Pedoman Pembentukan TPPK SD (${school.nama}):**\n\n1. **Dasar Hukum:** Permendikbudristek No. 46 Tahun 2023 tentang Pencegahan dan Penanganan Kekerasan di Lingkungan Satuan Pendidikan.\n2. **Ketentuan Anggota:**\n   • Jumlah anggota wajib **ganjil** (minimal 3 orang).\n   • Unsur wajib: Perwakilan Pendidik (bukan Kepala Sekolah), Tenaga Kependidikan, dan Komite Sekolah / Orang Tua.\n   • Masa tugas: **2 tahun** dan dapat diperpanjang.\n3. **Kewajiban Pengesahan:** SK yang ditandatangani Kepala Sekolah wajib diunggah ke Portal Pencegahan Kekerasan (Kemendikdasmen) dan tersinkronisasi dengan Dapodik.`;
+  }
+  if (low.includes("anbk") || low.includes("asesmen") || low.includes("sulingjar")) {
+    return `📌 **Pedoman Panitia Asesmen Nasional (ANBK) SD:**\n\n1. **Susunan Panitia:**\n   • Penanggung Jawab: Kepala Sekolah\n   • Ketua Pelaksana: Guru Senior / Urusan Kurikulum\n   • Proktor: 1 orang (menguasai teknis aplikasi web ANBK & Exambro)\n   • Teknisi: 1 orang (memastikan kesiapan perangkat Chromebook/PC dan koneksi internet)\n   • Pengawas Ruang: Pengawas silang dari sekolah sekitar.\n2. **Cakupan Agenda:** Simulasi, Gladi Bersih, Pelaksanaan ANBK Literasi & Numerasi, serta Survei Lingkungan Belajar (Sulingjar).`;
+  }
+  if (low.includes("dasar hukum") || low.includes("regulasi") || low.includes("mengingat") || low.includes("konsiderans")) {
+    return `📌 **Rujukan Dasar Hukum Tata Naskah Dinas SK SD (${school.nama}):**\n\n1. **UU No. 20 Tahun 2003** tentang Sistem Pendidikan Nasional;\n2. **PP No. 57 Tahun 2021 jo PP No. 4 Tahun 2022** tentang Standar Nasional Pendidikan;\n3. **Permendikdasmen No. 10 Tahun 2025** tentang Standar Kompetensi Lulusan (SKL);\n4. **Permendikdasmen No. 12 Tahun 2025** tentang Standar Isi Pendidikan Dasar;\n5. **Permendikdasmen No. 13 Tahun 2025** tentang Struktur & Pedoman Implementasi Kurikulum;\n6. **Keputusan Kepala Dinas Pendidikan Kabupaten ${school.kabupaten}** tentang Kalender Pendidikan Tahun Ajaran Berjalan.`;
+  }
+  return `Halo Bapak/Ibu Kepala Sekolah ${school.nama}! Saya Asisten AI Administrasi Pendidikan SD.\n\nSaya siap mendampingi pengelolaan administrasi ${totalGuru} orang PTK di sekolah Anda. Anda dapat mendiskusikan:\n• Perhitungan beban kerja 24-40 jam & linieritas sertifikasi guru\n• Susunan tim dan dasar hukum SK TPPK, Tim BOS, atau ANBK\n• Penyusunan konsiderans Menimbang, Mengingat, dan Diktum keputusan\n• Penyesuaian tata naskah dinas Kurikulum Merdeka.\n\nSilakan ajukan pertanyaan atau klik topik rekomendasi di bawah!`;
 }
 
 export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
@@ -55,6 +85,32 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
     scrollToBottom();
   }, [messages]);
 
+  const detectSuggestedAction = (text: string) => {
+    const lowText = text.toLowerCase();
+    if (lowText.includes("pembagian tugas") || lowText.includes("kbm")) {
+      return {
+        label: "Buat SK Pembagian Tugas KBM Sekarang",
+        skType: "SK Pembagian Tugas Guru dalam KBM",
+      };
+    } else if (lowText.includes("bos") || lowText.includes("bosp")) {
+      return {
+        label: "Buat SK Tim BOS Sekarang",
+        skType: "SK Tim BOS / Pengelola BOSP",
+      };
+    } else if (lowText.includes("tppk") || lowText.includes("kekerasan")) {
+      return {
+        label: "Buat SK TPPK Sekarang",
+        skType: "SK Tim Pencegahan dan Penanganan Kekerasan (TPPK)",
+      };
+    } else if (lowText.includes("anbk") || lowText.includes("asesmen")) {
+      return {
+        label: "Buat SK Panitia Asesmen Nasional Sekarang",
+        skType: "SK Panitia Asesmen Nasional (ANBK)",
+      };
+    }
+    return undefined;
+  };
+
   const handleSendMessage = async (textToSend?: string) => {
     const text = textToSend || inputMessage;
     if (!text.trim() || isLoading) return;
@@ -70,16 +126,27 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
     setInputMessage("");
     setIsLoading(true);
 
+    // Sanitize conversation history: exclude error messages and non-substantive notices
+    const cleanHistory = messages
+      .filter((m) => !m.id.startsWith("ai-err-") && !m.text.includes("gangguan koneksi"))
+      .slice(-6)
+      .map((m) => ({
+        role: m.sender === "user" ? "user" : "model",
+        content: m.text,
+      }));
+
     try {
+      // 12-second timeout to avoid mobile browser disconnects or 504 proxy aborts
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
       const response = await fetch("/api/gemini/assistant-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           message: text.trim(),
-          history: messages.slice(-8).map((m) => ({
-            role: m.sender === "user" ? "user" : "model",
-            content: m.text,
-          })),
+          history: cleanHistory,
           context: {
             sekolah: schoolProfile.nama,
             kepalaSekolah: schoolProfile.kepalaSekolah.nama,
@@ -88,37 +155,15 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
         }),
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
         throw new Error(`Server returned status ${response.status}`);
       }
 
       const resJson = await response.json();
-      if (resJson.success) {
-        // Detect if the user was asking to create an SK
-        let suggestedAction: { label: string; skType: string } | undefined;
-        const lowText = text.toLowerCase();
-        if (lowText.includes("pembagian tugas") || lowText.includes("kbm")) {
-          suggestedAction = {
-            label: "Buat SK Pembagian Tugas KBM Sekarang",
-            skType: "SK Pembagian Tugas Guru dalam KBM",
-          };
-        } else if (lowText.includes("bos") || lowText.includes("bosp")) {
-          suggestedAction = {
-            label: "Buat SK Tim BOS Sekarang",
-            skType: "SK Tim BOS / Pengelola BOSP",
-          };
-        } else if (lowText.includes("tppk") || lowText.includes("kekerasan")) {
-          suggestedAction = {
-            label: "Buat SK TPPK Sekarang",
-            skType: "SK Tim Pencegahan dan Penanganan Kekerasan (TPPK)",
-          };
-        } else if (lowText.includes("anbk") || lowText.includes("asesmen")) {
-          suggestedAction = {
-            label: "Buat SK Panitia Asesmen Nasional Sekarang",
-            skType: "SK Panitia Asesmen Nasional (ANBK)",
-          };
-        }
-
+      if (resJson.success && resJson.reply) {
+        const suggestedAction = detectSuggestedAction(text);
         const aiMsg: Message = {
           id: `ai-${Date.now()}`,
           sender: "ai",
@@ -128,23 +173,24 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
         };
         setMessages((prev) => [...prev, aiMsg]);
       } else {
-        const errorMsg: Message = {
-          id: `ai-err-${Date.now()}`,
-          sender: "ai",
-          text: resJson.error || resJson.warning || "Mohon maaf, layanan AI sedang mengalami antrean. Silakan coba kembali sesaat lagi.",
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        };
-        setMessages((prev) => [...prev, errorMsg]);
+        throw new Error(resJson.error || "No reply returned");
       }
     } catch (err) {
-      console.error("Assistant chat error:", err);
-      const errorMsg: Message = {
-        id: `ai-err-${Date.now()}`,
+      console.warn("Assistant connection dropped, using intelligent local engine:", err);
+      // Fallback seamlessly to local regulation knowledge so user is never blocked on other devices
+      const fallbackReply = getClientLocalAssistantReply(text.trim(), schoolProfile, employees.length);
+      const suggestedAction = detectSuggestedAction(text);
+
+      const smartMsg: Message = {
+        id: `ai-local-${Date.now()}`,
         sender: "ai",
-        text: "Mohon maaf, terjadi gangguan koneksi ke layanan AI. Silakan coba kembali sesaat lagi.",
+        text: fallbackReply,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        isOfflineFallback: true,
+        canRetryPrompt: text.trim(),
+        suggestedAction,
       };
-      setMessages((prev) => [...prev, errorMsg]);
+      setMessages((prev) => [...prev, smartMsg]);
     } finally {
       setIsLoading(false);
     }
@@ -169,8 +215,9 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold">Asisten Administrasi Kepala Sekolah SD</h3>
-              <span className="bg-purple-500/20 text-purple-300 text-[10px] px-2 py-0.5 rounded font-semibold border border-purple-500/30">
-                Gemini AI
+              <span className="bg-emerald-500/20 text-emerald-300 text-[10px] px-2 py-0.5 rounded font-semibold border border-emerald-500/30 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                AI Multi-Perangkat Siap
               </span>
             </div>
             <p className="text-[11px] text-slate-400">
@@ -199,7 +246,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
               {msg.sender === "user" ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 max-w-full">
               <div
                 className={`p-4 rounded-2xl text-xs leading-relaxed ${
                   msg.sender === "user"
@@ -209,6 +256,26 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
               >
                 {msg.text}
               </div>
+
+              {/* Offline fallback indicator & retry button */}
+              {msg.isOfflineFallback && (
+                <div className="flex flex-wrap items-center gap-2 pt-0.5 px-1">
+                  <span className="inline-flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md font-medium">
+                    <Wifi className="w-3 h-3 text-amber-600" />
+                    Mode Mandiri (Koneksi jaringan terputus)
+                  </span>
+                  {msg.canRetryPrompt && (
+                    <button
+                      onClick={() => handleSendMessage(msg.canRetryPrompt)}
+                      disabled={isLoading}
+                      className="inline-flex items-center gap-1 text-[10px] text-purple-700 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-0.5 rounded-md font-bold transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Coba Hubungkan AI Online Lagi
+                    </button>
+                  )}
+                </div>
+              )}
 
               {msg.suggestedAction && (
                 <div className="pt-1">

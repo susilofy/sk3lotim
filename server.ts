@@ -32,6 +32,17 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json({ limit: "10mb" }));
 
+// Universal CORS & Preflight handling for multi-device access (LAN, mobile, shared preview)
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
+
 // Helper to retrieve effective API key from environment or fallback paths
 function getGeminiKey(): string {
   const directKey = (
@@ -99,44 +110,30 @@ async function generateContentWithFallback(
   }
 ): Promise<{ text: string; model: string }> {
   let lastError: any = null;
-  const timeoutMs = params.timeoutMs || 45000;
+  const timeoutMs = params.timeoutMs || 15000;
 
   for (const modelName of CANDIDATE_TEXT_MODELS) {
-    // Retry up to 2 attempts for transient conditions (e.g. 503 high demand spike, 429 rate limit)
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        console.log(`[AI Generator] Menggunakan model ${modelName} (percobaan ${attempt + 1})...`);
-        const res = await withTimeout(
-          ai.models.generateContent({
-            model: modelName,
-            contents: params.contents,
-            config: params.config,
-          }),
-          timeoutMs,
-          `Batas waktu pembuatan draf AI ${modelName} habis (${Math.round(timeoutMs / 1000)} detik)`
-        );
-        if (res.text) {
-          console.log(`[AI Generator] Berhasil menghasilkan konten dengan ${modelName} (${res.text.length} karakter).`);
-          return { text: res.text, model: modelName };
-        }
-      } catch (err: any) {
-        lastError = err;
-        const msg = err?.message || String(err);
-        console.warn(`[AI Generator] Model ${modelName} gagal: ${msg}`);
-        const isTransient =
-          msg.includes("503") ||
-          msg.includes("UNAVAILABLE") ||
-          msg.includes("high demand") ||
-          msg.includes("429") ||
-          msg.includes("Resource has been exhausted") ||
-          msg.includes("habis");
-        if (isTransient && attempt === 0) {
-          // Brief pause before retry
-          await new Promise((r) => setTimeout(r, 600));
-          continue;
-        }
-        break;
+    try {
+      console.log(`[AI Generator] Menggunakan model ${modelName}...`);
+      const res = await withTimeout(
+        ai.models.generateContent({
+          model: modelName,
+          contents: params.contents,
+          config: params.config,
+        }),
+        timeoutMs,
+        `Batas waktu pembuatan draf AI ${modelName} habis (${Math.round(timeoutMs / 1000)} detik)`
+      );
+      if (res.text) {
+        console.log(`[AI Generator] Berhasil menghasilkan konten dengan ${modelName} (${res.text.length} karakter).`);
+        return { text: res.text, model: modelName };
       }
+    } catch (err: any) {
+      lastError = err;
+      const msg = err?.message || String(err);
+      console.warn(`[AI Generator] Model ${modelName} gagal atau timeout: ${msg}`);
+      // Fallback immediately to next candidate model
+      continue;
     }
   }
 
@@ -153,40 +150,28 @@ async function createChatWithFallback(
   }
 ): Promise<{ text: string; model: string }> {
   let lastError: any = null;
-  const timeoutMs = params.timeoutMs || 30000;
+  const timeoutMs = params.timeoutMs || 10000;
 
   for (const modelName of CANDIDATE_TEXT_MODELS) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const chat = ai.chats.create({
-          model: modelName,
-          history: params.history,
-          config: params.config,
-        });
-        const res = await withTimeout(
-          chat.sendMessage({ message: params.message }),
-          timeoutMs,
-          `Batas waktu respon asisten AI ${modelName} habis (${Math.round(timeoutMs / 1000)} detik)`
-        );
-        if (res.text) {
-          return { text: res.text, model: modelName };
-        }
-      } catch (err: any) {
-        lastError = err;
-        const msg = err?.message || String(err);
-        const isTransient =
-          msg.includes("503") ||
-          msg.includes("UNAVAILABLE") ||
-          msg.includes("high demand") ||
-          msg.includes("429") ||
-          msg.includes("Resource has been exhausted") ||
-          msg.includes("habis");
-        if (isTransient && attempt === 0) {
-          await new Promise((r) => setTimeout(r, 600));
-          continue;
-        }
-        break;
+    try {
+      const chat = ai.chats.create({
+        model: modelName,
+        history: params.history && params.history.length > 0 ? params.history : undefined,
+        config: params.config,
+      });
+      const res = await withTimeout(
+        chat.sendMessage({ message: params.message }),
+        timeoutMs,
+        `Batas waktu respon asisten AI ${modelName} habis (${Math.round(timeoutMs / 1000)} detik)`
+      );
+      if (res.text) {
+        return { text: res.text, model: modelName };
       }
+    } catch (err: any) {
+      lastError = err;
+      const msg = err?.message || String(err);
+      console.warn(`[AI Chat] Model ${modelName} gagal atau timeout: ${msg}`);
+      continue;
     }
   }
 
@@ -1096,15 +1081,31 @@ const handleAssistantChat = async (req: Request, res: Response) => {
     });
   }
 
-  const formattedHistory = reqHistory
-    ? reqHistory.map((h: any) => ({
-        role: h.role === "assistant" || h.role === "model" ? "model" : "user",
-        parts: [{ text: h.content || h.text || "" }],
-      }))
-    : (messages || []).slice(0, -1).map((m: any) => ({
-        role: m.role === "assistant" || m.role === "model" ? "model" : "user",
-        parts: [{ text: m.content || m.text || "" }],
-      }));
+  // Sanitize multi-turn history strictly for Gemini SDK: must alternate user -> model -> user -> model
+  const rawList = reqHistory || (messages ? messages.slice(0, -1) : []);
+  const sanitizedHistory: { role: "user" | "model"; parts: { text: string }[] }[] = [];
+  let expectedRole: "user" | "model" = "user";
+
+  for (const h of rawList || []) {
+    const textContent = (h.content || h.text || "").trim();
+    if (!textContent) continue;
+    // Skip error messages or offline notices
+    if (textContent.includes("gangguan koneksi") || textContent.includes("Mode Template Offline")) continue;
+
+    const role: "user" | "model" = (h.role === "assistant" || h.role === "model") ? "model" : "user";
+    if (role === expectedRole) {
+      sanitizedHistory.push({
+        role,
+        parts: [{ text: textContent }],
+      });
+      expectedRole = role === "user" ? "model" : "user";
+    }
+  }
+
+  // Ensure history ends with a model turn so the new message becomes the user turn
+  if (sanitizedHistory.length > 0 && sanitizedHistory[sanitizedHistory.length - 1].role === "user") {
+    sanitizedHistory.pop();
+  }
 
   const systemInstruction = `Anda adalah "Asisten AI Administrasi Kepala Sekolah SD". Anda ramah, bijak, berwibawa, dan sangat menguasai tata laksana dinas pendidikan dasar di Indonesia (Kurikulum Merdeka, Permendikdasmen terbaru, Pengelolaan BOS/BOSP, Pemenuhan Jam Mengajar Guru 24-40 jam, TPPK, TPMPS, Komite Sekolah, dsb).
 Konteks Satuan Pendidikan:
@@ -1118,12 +1119,13 @@ Berikan jawaban yang taktis, solutif, santun, dan sesuai regulasi pendidikan Ind
     let responseText = "";
     try {
       const chatResult = await createChatWithFallback(ai, {
-        history: formattedHistory,
+        history: sanitizedHistory.length > 0 ? sanitizedHistory : undefined,
         config: {
           systemInstruction,
           temperature: 0.3,
         },
         message: incomingText,
+        timeoutMs: 10000,
       });
       responseText = chatResult.text || "";
     } catch (chatErr: any) {
@@ -1136,7 +1138,7 @@ Berikan jawaban yang taktis, solutif, santun, dan sesuai regulasi pendidikan Ind
       reply: responseText || getLocalAssistantReply(incomingText),
     });
   } catch (error: any) {
-    console.warn("AI Assistant chat busy, returning local smart response:", error?.message);
+    console.warn("AI Assistant chat fallback to local smart response:", error?.message);
     res.json({
       success: true,
       reply: getLocalAssistantReply(incomingText),
